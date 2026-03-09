@@ -2,6 +2,7 @@ require("dotenv").config()
 const express = require("express");
 const axios = require("axios");
 const redis = require("redis");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 
@@ -11,7 +12,13 @@ const redisClient = redis.createClient({url: "redis://localhost:6379"});
 // connect to redis server
 redisClient.connect().catch(console.error);
 
-app.get("/weather", async (req, res) => {
+const limiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,              // limit each IP to 5 requests
+  message: "Too many requests, please try again later."
+});
+
+app.get("/weather", limiter, async (req, res) => {
 
     const city = req.query.city.toLowerCase();
 
