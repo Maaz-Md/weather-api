@@ -1,43 +1,65 @@
 require("dotenv").config()
 const express = require("express");
 const axios = require("axios");
-
+const redis = require("redis");
 
 const app = express();
 
+//Create a Redis Client Instance
+const redisClient = redis.createClient({url: "redis://localhost:6379"});
+
+// connect to redis server
+redisClient.connect().catch(console.error);
+
 app.get("/weather", async (req, res) => {
 
-  const city = req.query.city;
+    const city = req.query.city.toLowerCase();
 
-  if (!city) {
-    return res.status(400).send("City is Required");
-  }
-
-  try {
-
-    const apiKey =  process.env.WEATHER_API_kEY;
-
-    const response = await axios.get(`https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${city}?key=${apiKey}`)
-
-    res.json(response.data);
-
-  } catch (error) {
-
-    if (error.response.status === 404) {
-      return res.status(404).send("City not found")
+    // Check if the city is present 
+    if (!city) {
+      return res.status(400).send("City is Required");
     }
 
-    if (error.response.status === 502) {
-      return res.status(502).send("Weather service unavailable")
-    }
+    try {
 
-    if (error.response.status === 401) {
-      return res.status(401).send("Invalid API key")
-    }
+      //check if city is in cache
+      const cachedData = await redisClient.get(city);
 
-    res.status(500).send("Error fetching weather data")
-  }
-  
+      if (cachedData) {
+        console.log("Cache HIT");
+        return res.json(JSON.parse(cachedData));
+      }
+
+      console.log("Cache MISS");
+
+      const apiKey =  process.env.WEATHER_API_kEY;
+
+      const response = await axios.get(`https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${city}?key=${apiKey}`)
+
+      const weatherData = response.data;
+
+      // store data in redis for 1 hour
+      await redisClient.setEx(city, 3600, JSON.stringify(weatherData)); 
+
+      res.json(weatherData);
+
+    } catch (error) {
+
+      if (error.response.status === 404) {
+        return res.status(404).send("City not found")
+      }
+
+      if (error.response.status === 502) {
+        return res.status(502).send("Weather service unavailable")
+      }
+
+      if (error.response.status === 401) {
+        return res.status(401).send("Invalid API key")
+      }
+
+      res.status(500).send("Error fetching weather data")
+    }
+    
 });
 
 app.listen(process.env.PORT, () => {
