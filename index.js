@@ -20,11 +20,11 @@ const limiter = rateLimit({
 
 app.get("/weather", limiter, async (req, res) => {
 
-    const city = req.query.city.toLowerCase();
+    const city = req.query.city?.toLowerCase();
 
     // Check if the city is present 
     if (!city) {
-      return res.status(400).send("City is Required");
+      return res.status(400).send("City query parameter is required. Use /weather?city=cityname");
     }
 
     try {
